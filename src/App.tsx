@@ -12,8 +12,10 @@ import Container from "@mui/material/Container";
 import CssBaseline from "@mui/material/CssBaseline";
 import Box from "@mui/material/Box";
 import { Button } from "@mui/material";
+import { v4 as uuidv4 } from "uuid";
 
 type ExcelDataType = {
+  id: string;
   Name: string;
   Mail: string;
   DOB: string;
@@ -23,12 +25,11 @@ type ExcelDataType = {
   State: string;
   University: string;
   Cmpany: string;
+  Phone: string;
 };
 
 function App() {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-
+  const [exportedData, setExportedData] = useState<string[]>([]);
   const [excelData, setExcelData] = useState<Partial<ExcelDataType>[]>([]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -41,7 +42,15 @@ function App() {
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
         const parsedData = XLSX.utils.sheet_to_json(sheet);
-        setExcelData(parsedData as any);
+        const newParsedWithId = parsedData.map((item: any) => {
+          return {
+            ...item,
+            id: uuidv4(),
+          };
+        });
+
+        console.log(newParsedWithId);
+        setExcelData(newParsedWithId as any);
       };
       reader.readAsArrayBuffer(file);
     }
@@ -54,17 +63,25 @@ function App() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ name: data.Name, email: data.Mail }),
+        body: JSON.stringify({
+          name: data.Name,
+          email: data.Mail,
+          phone: data.Phone,
+          city: data.City,
+          state: data.State,
+          address: data.ADDRESS,
+          dob: data.DOB,
+        }),
       });
 
       if (response.ok) {
-        // Convert the response to a Blob and create a download link
         const pdfBlob = await response.blob();
         const url = URL.createObjectURL(pdfBlob);
         const a = document.createElement("a");
         a.href = url;
         a.download = "output.pdf";
         a.click();
+        setExportedData([...exportedData, data.id as string]);
       } else {
         console.error("PDF generation failed.");
       }
@@ -73,22 +90,54 @@ function App() {
     }
   }
 
+  async function generatePDFs() {
+    if (exportedData.length > 0) {
+      return;
+    }
+    for (const data of excelData) {
+      await generatePDF(data);
+    }
+    setExportedData(excelData.map((item) => item.id as string));
+  }
+
   return (
     <>
       <CssBaseline />
       <Container maxWidth="lg">
         <Box sx={{ bgcolor: "#cfe8fc", height: "100vh" }}>
-          <h1>Excel Data to HTML in React</h1>
-          <input type="file" accept=".xlsx" onChange={handleFileUpload} />
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
+              padding: "10px",
+            }}
+          >
+            <Box>
+              <h1>Excel Data to PDF</h1>
+              {exportedData.length === excelData.length ? (
+                <h2 style={{ color: "red", textTransform: "uppercase" }}>
+                  Please upload new excel file, the current is done
+                </h2>
+              ) : (
+                ""
+              )}
+              <input type="file" accept=".xlsx" onChange={handleFileUpload} />
+            </Box>
+            <Box>
+              <Button variant="contained" onClick={() => generatePDFs()}>
+                Export all PDFs
+              </Button>
+            </Box>
+          </Box>
           <TableContainer component={Paper}>
             <Table sx={{ minWidth: 650 }} aria-label="simple table">
               <TableHead>
                 <TableRow>
                   <TableCell align="left">Name</TableCell>
                   <TableCell align="center">Email</TableCell>
-                  <TableCell align="center">University</TableCell>
-                  <TableCell align="center">Company</TableCell>
                   <TableCell align="center">Action</TableCell>
+                  <TableCell align="center">Is exported</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -100,16 +149,26 @@ function App() {
                     <TableCell component="th" scope="row">
                       {row.Name}
                     </TableCell>
-                    <TableCell align="right">{row.Mail}</TableCell>
-                    <TableCell align="right">{row.University}</TableCell>
-                    <TableCell align="right">{row.Cmpany}</TableCell>
-                    <TableCell align="right">
+                    <TableCell align="center">{row.Mail}</TableCell>
+                    <TableCell align="center">
                       <Button
                         onClick={() => generatePDF(row)}
                         variant="outlined"
+                        disabled={exportedData.includes(row.id as string)}
                       >
                         Export PDF
                       </Button>
+                    </TableCell>
+                    <TableCell align="center">
+                      {exportedData.includes(row.id as string) ? (
+                        <span role="img" aria-label="check">
+                          ✅
+                        </span>
+                      ) : (
+                        <span role="img" aria-label="cross">
+                          ❌
+                        </span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
